@@ -1,5 +1,5 @@
 {
-  "name": "Primavis App",
+  "name": "Primavis",
   "short_name": "Primavis",
   "start_url": "/",
   "display": "standalone",
@@ -7,9 +7,9 @@
   "theme_color": "#ffffff",
   "icons": [
     {
-      "src": "/vite.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml"
+      "src": "/ChatGPT Image 5 févr. 2026, 09_40_30 (1).png", 
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }
