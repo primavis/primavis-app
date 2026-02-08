@@ -13,10 +13,22 @@ function App() {
   // Stats fictives (Tu connecteras n8n plus tard pour les rendre réelles)
   const [stats, setStats] = useState({ sent: 124, clicks: 45 });
 
+  
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('client_id');
-    setClientId(id);
+    const idFromUrl = params.get('client_id');
+
+    if (idFromUrl) {
+      
+      setClientId(idFromUrl);
+      localStorage.setItem('primavis_client_id', idFromUrl);
+    } else {
+     
+      const savedId = localStorage.getItem('primavis_client_id');
+      if (savedId) {
+        setClientId(savedId);
+      }
+    }
   }, []);
 
   const handlePress = (num: string) => {
