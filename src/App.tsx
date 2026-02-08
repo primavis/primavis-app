@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Smartphone, BarChart3, Lock, CheckCircle, WifiOff, Loader2, Send, History } from 'lucide-react';
 
 // 🔗 METS TON LIEN N8N ICI
-const WEBHOOK_SEND = "https://automation.primavis.fr/webhook-test/sms-send"; 
+const WEBHOOK_SEND = "https://automation.primavis.fr/webhook/sms-send"; 
 
 function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'stats'>('home');
