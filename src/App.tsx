@@ -11,7 +11,27 @@ function App() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'cooldown'>('idle');
   
   // Stats fictives
-  const [stats, setStats] = useState({ sent: 124, clicks: 45 });
+  // 1. Initialisation à zéro (au lieu des faux chiffres)
+  const [stats, setStats] = useState({ sent: 0, clicks: 0 });
+
+  // 2. Connexion à n8n pour récupérer les vrais chiffres
+  useEffect(() => {
+    // ⚠️ COLLE TON URL DE WEBHOOK N8N ICI (Celle qui finit par /my-stats)
+    const API_URL = "https://automation.primavis.fr/webhook/dashboard"; 
+
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(data => {
+        console.log("Stats reçues de n8n :", data);
+        // On met à jour l'affichage avec les données de n8n
+        // Attention : n8n renvoie "envoyes", mais ton app attend "sent"
+        setStats({ 
+            sent: data.envoyes || 0, 
+            clicks: data.clics || 0 
+        });
+      })
+      .catch(err => console.error("Erreur de chargement des stats :", err));
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
