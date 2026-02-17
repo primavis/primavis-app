@@ -5,33 +5,87 @@ import { Smartphone, BarChart3, Lock, CheckCircle, WifiOff, Loader2, Send, Histo
 const WEBHOOK_SEND = "https://automation.primavis.fr/webhook/sms-send"; 
 
 function App() {
+  // 1. On récupère l'ID dans l'URL tout de suite
+  const searchParams = new URLSearchParams(window.location.search);
+  const urlClientId = searchParams.get('client_id');
+
+  // 2. États de sécurité
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Par défaut : Accès refusé
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);    // Par défaut : Chargement...
+
+  // Tes autres états
   const [activeTab, setActiveTab] = useState<'home' | 'stats'>('home');
-  const [clientId, setClientId] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'cooldown'>('idle');
-  
-  // Stats fictives
-  // 1. Initialisation à zéro (au lieu des faux chiffres)
   const [stats, setStats] = useState({ sent: 0, clicks: 0 });
 
-  // 2. Connexion à n8n pour récupérer les vrais chiffres
+  // 3. LA SÉCURITÉ : On vérifie l'ID auprès de n8n au chargement
   useEffect(() => {
-    // ⚠️ COLLE TON URL DE WEBHOOK N8N ICI (Celle qui finit par /my-stats)
-    const API_URL = "https://automation.primavis.fr/webhook/dashboard"; 
+    // Si pas d'ID dans l'URL, on cherche même pas : c'est NON direct.
+    if (!urlClientId) {
+      setIsLoadingAuth(false);
+      return; 
+    }
 
-    fetch(API_URL)
+    // Sinon, on demande à n8n si ce client existe
+    // Remplace bien par TON URL de webhook Dashboard
+    const API_URL = "https://automation.primavis.fr/webhook/sms-send"; 
+
+    fetch(`${API_URL}?client_id=${urlClientId}`)
       .then(res => res.json())
       .then(data => {
-        console.log("Stats reçues de n8n :", data);
-        // On met à jour l'affichage avec les données de n8n
-        // Attention : n8n renvoie "envoyes", mais ton app attend "sent"
-        setStats({ 
-            sent: data.envoyes || 0, 
-            clicks: data.clics || 0 
-        });
+        // N8N doit nous renvoyer une info qui prouve que le client existe
+        // Si data.found === false ou si on a une erreur, on bloque
+        if (data.error || data.message === "Client inconnu") {
+           console.error("Client non reconnu par n8n");
+           setIsAuthenticated(false);
+        } else {
+           // C'est bon, le client existe, on charge ses stats
+           setIsAuthenticated(true);
+           setStats({
+             sent: data.envoyes || 0,
+             clicks: data.clics || 0
+           });
+        }
       })
-      .catch(err => console.error("Erreur de chargement des stats :", err));
-  }, []);
+      .catch(err => {
+        console.error("Erreur connexion", err);
+        setIsAuthenticated(false); // En cas d'erreur réseau, on bloque par sécurité
+      })
+      .finally(() => {
+        setIsLoadingAuth(false); // Fin du chargement
+      });
+  }, [urlClientId]);
+
+  // 4. LES ÉCRANS DE BLOCAGE
+  
+  // A. Écran de chargement (pendant que n8n vérifie)
+  if (isLoadingAuth) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
+        <p>Vérification de l'accès...</p>
+      </div>
+    );
+  }
+
+  // B. Écran de Verrouillage (Si pas d'ID ou ID faux)
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-6 text-center">
+        <Lock className="w-24 h-24 text-red-500 mb-6" />
+        <h1 className="text-3xl font-bold mb-2">Accès Refusé</h1>
+        <p className="text-gray-400 mb-8">
+          Ce lien est invalide ou votre identifiant client est incorrect.
+        </p>
+        <div className="text-sm text-gray-600 border border-gray-800 p-3 rounded">
+          ID Tenté : {urlClientId || "Aucun"}
+        </div>
+      </div>
+    );
+  }
+
+  // ... LA SUITE DE TON CODE (return <div className="min-h-screen...")
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
