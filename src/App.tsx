@@ -29,7 +29,7 @@ function App() {
 
     // Sinon, on demande à n8n si ce client existe
     // Remplace bien par TON URL de webhook Dashboard
-    const API_URL = "https://automation.primavis.fr/webhook/sms-send"; 
+    const API_URL = "https://automation.primavis.fr/webhook/dashboard"; 
 
     fetch(`${API_URL}?client_id=${urlClientId}`)
       .then(res => res.json())
