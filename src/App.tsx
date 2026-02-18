@@ -18,7 +18,7 @@ function App() {
   // Stats
   const [stats, setStats] = useState({ sent: 0, clicks: 0 });
 
-  // --- 1. LE CERVEAU (SÉCURITÉ + MÉMOIRE + STATS) ---
+  // --- 1. LE CERVEAU (SÉCURITÉ + MÉMOIRE + STATS BLINDÉES) ---
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     let urlId = searchParams.get('client_id');
@@ -42,22 +42,41 @@ function App() {
 
     fetch(`${API_URL}?client_id=${urlId}`)
       .then(res => res.json())
-      .then(data => {
-        if (data.error || data.message === "Client inconnu") {
+      .then(rawData => {
+        // --- 🛡️ CORRECTION ULTRA-ROBUSTE DES DONNÉES ---
+        
+        // 1. Gérer si n8n renvoie une liste [ ... ] au lieu d'un objet { ... }
+        // C'est souvent ça qui cause le bug du "0"
+        const data = Array.isArray(rawData) ? rawData[0] : rawData;
+
+        // 2. Vérifier l'erreur
+        if (!data || data.error || data.message === "Client inconnu") {
            console.error("Client rejeté par n8n");
            setIsAuthenticated(false);
            localStorage.removeItem('primavis_client_id'); 
         } else {
            setIsAuthenticated(true);
            
-           // --- CORRECTION DES STATS ICI ---
-           // On cherche d'abord 'Compteur_Mois' (ton Sheet), sinon 'envoyes'
-           const realSentCount = data.Compteur_Mois || data.envoyes || 0;
-           const realClicksCount = data.Clics || data.clics || 0;
+           // 3. Chercher les stats peu importe comment n8n les nomme
+           // On cherche : Compteur_Mois OU compteur_mois OU envoyes OU Sent
+           const realSent = 
+             data.Compteur_Mois || 
+             data.compteur_mois || 
+             data.envoyes || 
+             data.Sent || 
+             0;
+
+           const realClicks = 
+             data.Clics || 
+             data.clics || 
+             data.Clicks || 
+             0;
+
+           console.log("Stats reçues :", realSent, realClicks); // Pour debug F12
 
            setStats({
-             sent: parseInt(realSentCount), // On force en nombre pour être sûr
-             clicks: parseInt(realClicksCount)
+             sent: parseInt(realSent),
+             clicks: parseInt(realClicks)
            });
         }
       })
