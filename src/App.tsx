@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, BarChart3, Lock, CheckCircle, WifiOff, Loader2, Send, History } from 'lucide-react';
+import { Smartphone, BarChart3, Lock, CheckCircle, WifiOff, Loader2, Send, History, Delete } from 'lucide-react';
 
 // 🔗 TON LIEN N8N POUR ENVOYER LE SMS
 const WEBHOOK_SEND = "https://automation.primavis.fr/webhook/sms-send";
@@ -20,29 +20,23 @@ function App() {
 
   // --- 1. LE CERVEAU (SÉCURITÉ + MÉMOIRE) ---
   useEffect(() => {
-    // A. On cherche l'ID partout (URL d'abord, Mémoire ensuite)
     const searchParams = new URLSearchParams(window.location.search);
     let urlId = searchParams.get('client_id');
     const storedId = localStorage.getItem('primavis_client_id');
 
-    // Si on a un ID dans l'URL (première fois), on le sauvegarde pour toujours
     if (urlId) {
       localStorage.setItem('primavis_client_id', urlId);
-    } 
-    // Si pas d'ID dans l'URL mais qu'on en a un en mémoire, on l'utilise
-    else if (storedId) {
+    } else if (storedId) {
       urlId = storedId;
     }
 
     setClientId(urlId);
 
-    // B. Si on a trouvé aucun ID nul part -> Bloqué direct
     if (!urlId) {
       setIsLoadingAuth(false);
       return;
     }
 
-    // C. Si on a un ID, on vérifie chez n8n qu'il est valide
     // ⚠️ REMPLACE BIEN PAR TON URL DASHBOARD ICI
     const API_URL = "https://automation.primavis.fr/webhook/dashboard"; 
 
@@ -52,21 +46,17 @@ function App() {
         if (data.error || data.message === "Client inconnu") {
            console.error("Client rejeté par n8n");
            setIsAuthenticated(false);
-           // Si l'ID est faux, on le nettoie de la mémoire pour pas rester bloqué
            localStorage.removeItem('primavis_client_id'); 
         } else {
-           // SUCCÈS !
            setIsAuthenticated(true);
            setStats({
-             sent: data.envoyes || 0, // Protection contre l'écran blanc (si undefined, met 0)
+             sent: data.envoyes || 0,
              clicks: data.clics || 0
            });
         }
       })
       .catch(err => {
         console.error("Erreur réseau", err);
-        // En cas d'erreur réseau, on peut choisir de laisser entrer ou non. 
-        // Ici on bloque par sécurité, mais tu pourrais mettre setIsAuthenticated(true) pour le mode hors ligne.
         setIsAuthenticated(false); 
       })
       .finally(() => {
@@ -74,33 +64,48 @@ function App() {
       });
   }, []);
 
-  // --- 2. FONCTION D'ENVOI SMS ---
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // --- 2. FONCTIONS DU PAVÉ NUMÉRIQUE ---
+  
+  // Gère l'appui sur une touche du pavé
+  const handleKeyPress = (key: string | number) => {
+    if (typeof key === 'number') {
+      if (phoneNumber.length < 10) {
+        setPhoneNumber(prev => prev + key);
+      }
+    } else if (key === 'del') {
+      setPhoneNumber(prev => prev.slice(0, -1));
+    }
+  };
+
+  // Formate le numéro pour l'affichage (ex: 06 12 34 56 78)
+  const formatPhoneNumber = (num: string) => {
+    return num.match(/.{1,2}/g)?.join(' ') || num;
+  };
+
+  // --- 3. FONCTION D'ENVOI SMS ---
+  const handleSend = async () => {
     if (phoneNumber.length < 10) return;
 
     setStatus('loading');
 
     try {
-      // On envoie à n8n avec l'ID du client sécurisé
       const response = await fetch(WEBHOOK_SEND, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           phone: phoneNumber,
-          client_id: clientId // On utilise l'ID mémorisé
+          client_id: clientId
         }), 
       });
 
       if (response.ok) {
         setStatus('success');
         setPhoneNumber('');
-        // On met à jour le compteur localement pour l'effet immédiat
         setStats(prev => ({ ...prev, sent: prev.sent + 1 }));
-        
         setTimeout(() => setStatus('idle'), 3000);
       } else {
         setStatus('error');
+        setTimeout(() => setStatus('idle'), 3000);
       }
     } catch (error) {
       setStatus('error');
@@ -108,9 +113,8 @@ function App() {
     }
   };
 
-  // --- 3. LES ÉCRANS DE BLOCAGE (Rendu conditionnel) ---
+  // --- 4. LES ÉCRANS DE BLOCAGE ---
 
-  // Écran de chargement
   if (isLoadingAuth) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
@@ -120,7 +124,6 @@ function App() {
     );
   }
 
-  // Écran Cadenas (Si refusé)
   if (!isAuthenticated || !clientId) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-6 text-center">
@@ -138,25 +141,29 @@ function App() {
     );
   }
 
-  // --- 4. L'APPLICATION (Si tout est OK) ---
+  // Définition des touches du pavé
+  const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, 'del'];
+
+  // --- 5. L'APPLICATION PRINCIPALE ---
+  // Utilisation de h-screen et flex-col pour occuper tout l'espace sans scroll
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
+    <div className="h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       
       {/* HEADER */}
-      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center shrink-0">
         <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
           Primavis
         </h1>
         <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
-          {clientId} {/* Affiche l'ID du client connecté */}
+          {clientId}
         </div>
       </div>
 
-      {/* CONTENU PRINCIPAL */}
-      <div className="p-6 max-w-md mx-auto">
+      {/* CONTENU PRINCIPAL (flex-grow occupe tout l'espace restant) */}
+      <div className="flex-grow flex flex-col p-4 max-w-md mx-auto w-full overflow-hidden">
         
         {/* ONGLETS */}
-        <div className="flex p-1 bg-gray-200 rounded-xl mb-8 relative">
+        <div className="flex p-1 bg-gray-200 rounded-xl mb-4 shrink-0 relative">
           <div 
             className={`absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-lg shadow-sm transition-all duration-300 ease-out ${activeTab === 'stats' ? 'translate-x-full' : ''}`}
           />
@@ -176,69 +183,89 @@ function App() {
           </button>
         </div>
 
-        {/* PAGE: ENVOI SMS */}
+        {/* PAGE: ENVOI SMS AVEC PAVÉ NUMÉRIQUE */}
         {activeTab === 'home' && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex-grow flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500 h-full justify-between">
+            
+            {/* ZONE D'AFFICHAGE DU NUMÉRO */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4 text-center shrink-0">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Numéro du client
               </label>
-              <form onSubmit={handleSend}>
-                <input
-                  type="tel"
-                  placeholder="06 12 34 56 78"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="w-full text-2xl font-bold text-center tracking-wider py-4 border-b-2 border-gray-200 focus:border-blue-500 outline-none transition-colors placeholder-gray-300 bg-transparent"
-                  autoFocus
-                />
-                
-                <button
-                  disabled={status === 'loading' || phoneNumber.length < 10}
-                  className={`w-full mt-8 py-4 rounded-xl font-bold text-white shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2
-                    ${status === 'success' ? 'bg-green-500 shadow-green-500/30' : 
-                      status === 'error' ? 'bg-red-500 shadow-red-500/30' : 
-                      'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-blue-500/40'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {status === 'loading' ? (
-                    <Loader2 className="animate-spin" />
-                  ) : status === 'success' ? (
-                    <> <CheckCircle /> Envoyé ! </>
-                  ) : status === 'error' ? (
-                    <> <WifiOff /> Erreur </>
-                  ) : (
-                    <> <Send size={20} /> Envoyer la demande </>
-                  )}
-                </button>
-              </form>
+              <div className={`text-4xl font-bold tracking-wider py-4 border-b-2 transition-colors ${phoneNumber ? 'text-gray-900 border-blue-500' : 'text-gray-300 border-gray-200'}`}>
+                {phoneNumber ? formatPhoneNumber(phoneNumber) : '06 12 34 56 78'}
+              </div>
             </div>
+
+            {/* PAVÉ NUMÉRIQUE GÉANT (flex-grow pour remplir l'espace) */}
+            <div className="grid grid-cols-3 gap-3 mb-4 flex-grow">
+              {keys.map((key, index) => {
+                if (key === '') return <div key={index}></div>; // Espace vide
+                
+                const isDelete = key === 'del';
+                return (
+                  <button
+                    key={index}
+                    onClick={() => handleKeyPress(key)}
+                    className={`rounded-2xl text-3xl font-bold shadow-sm border transition-all active:scale-95 flex items-center justify-center h-full
+                      ${isDelete 
+                        ? 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100' 
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-blue-200'
+                      }`}
+                  >
+                    {isDelete ? <Delete size={32} /> : key}
+                  </button>
+                );
+              })}
+            </div>
+              
+            {/* BOUTON D'ENVOI */}
+            <button
+              onClick={handleSend}
+              disabled={status === 'loading' || phoneNumber.length < 10}
+              className={`w-full py-5 rounded-xl font-bold text-xl text-white shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 shrink-0
+                ${status === 'success' ? 'bg-green-500 shadow-green-500/30' : 
+                  status === 'error' ? 'bg-red-500 shadow-red-500/30' : 
+                  'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-500/30'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {status === 'loading' ? (
+                <Loader2 className="animate-spin w-8 h-8" />
+              ) : status === 'success' ? (
+                <> <CheckCircle className="w-8 h-8" /> Envoyé ! </>
+              ) : status === 'error' ? (
+                <> <WifiOff className="w-8 h-8" /> Erreur </>
+              ) : (
+                <> <Send size={28} /> Envoyer la demande </>
+              )}
+            </button>
           </div>
         )}
 
-        {/* PAGE: STATS */}
+        {/* PAGE: STATS (Inchangée) */}
         {activeTab === 'stats' && (
+          // ... (Code des stats identique à avant)
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-                   <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3">
-                      <Send size={20} />
+                   <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3">
+                      <Send size={24} />
                    </div>
-                   <div className="text-3xl font-bold text-gray-900">{stats.sent}</div>
-                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">SMS Envoyés</div>
+                   <div className="text-4xl font-bold text-gray-900">{stats.sent}</div>
+                   <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mt-2">SMS Envoyés</div>
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-                   <div className="w-10 h-10 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-3">
-                      <History size={20} />
+                   <div className="w-12 h-12 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-3">
+                      <History size={24} />
                    </div>
-                   <div className="text-3xl font-bold text-gray-900">{stats.clicks}</div>
-                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">Clics Avis</div>
+                   <div className="text-4xl font-bold text-gray-900">{stats.clicks}</div>
+                   <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mt-2">Clics Avis</div>
                 </div>
              </div>
              
-             <div className="mt-6 bg-blue-50 rounded-xl p-4 border border-blue-100 text-center">
-                <p className="text-sm text-blue-800">
+             <div className="mt-6 bg-blue-50 rounded-xl p-6 border border-blue-100 text-center">
+                <p className="text-lg text-blue-800">
                    Votre taux de conversion est de <strong>{stats.sent > 0 ? Math.round((stats.clicks / stats.sent) * 100) : 0}%</strong>
                 </p>
              </div>
