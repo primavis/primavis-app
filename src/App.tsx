@@ -18,7 +18,7 @@ function App() {
   // Stats
   const [stats, setStats] = useState({ sent: 0, clicks: 0 });
 
-  // --- 1. LE CERVEAU (SÉCURITÉ + MÉMOIRE) ---
+  // --- 1. LE CERVEAU (SÉCURITÉ + MÉMOIRE + STATS) ---
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     let urlId = searchParams.get('client_id');
@@ -49,9 +49,15 @@ function App() {
            localStorage.removeItem('primavis_client_id'); 
         } else {
            setIsAuthenticated(true);
+           
+           // --- CORRECTION DES STATS ICI ---
+           // On cherche d'abord 'Compteur_Mois' (ton Sheet), sinon 'envoyes'
+           const realSentCount = data.Compteur_Mois || data.envoyes || 0;
+           const realClicksCount = data.Clics || data.clics || 0;
+
            setStats({
-             sent: data.envoyes || 0,
-             clicks: data.clics || 0
+             sent: parseInt(realSentCount), // On force en nombre pour être sûr
+             clicks: parseInt(realClicksCount)
            });
         }
       })
@@ -66,7 +72,6 @@ function App() {
 
   // --- 2. FONCTIONS DU PAVÉ NUMÉRIQUE ---
   
-  // Gère l'appui sur une touche du pavé
   const handleKeyPress = (key: string | number) => {
     if (typeof key === 'number') {
       if (phoneNumber.length < 10) {
@@ -77,7 +82,6 @@ function App() {
     }
   };
 
-  // Formate le numéro pour l'affichage (ex: 06 12 34 56 78)
   const formatPhoneNumber = (num: string) => {
     return num.match(/.{1,2}/g)?.join(' ') || num;
   };
@@ -101,6 +105,7 @@ function App() {
       if (response.ok) {
         setStatus('success');
         setPhoneNumber('');
+        // Mise à jour locale immédiate pour l'effet visuel
         setStats(prev => ({ ...prev, sent: prev.sent + 1 }));
         setTimeout(() => setStatus('idle'), 3000);
       } else {
@@ -145,7 +150,6 @@ function App() {
   const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, 'del'];
 
   // --- 5. L'APPLICATION PRINCIPALE ---
-  // Utilisation de h-screen et flex-col pour occuper tout l'espace sans scroll
   return (
     <div className="h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       
@@ -159,7 +163,7 @@ function App() {
         </div>
       </div>
 
-      {/* CONTENU PRINCIPAL (flex-grow occupe tout l'espace restant) */}
+      {/* CONTENU PRINCIPAL */}
       <div className="flex-grow flex flex-col p-4 max-w-md mx-auto w-full overflow-hidden">
         
         {/* ONGLETS */}
@@ -197,10 +201,10 @@ function App() {
               </div>
             </div>
 
-            {/* PAVÉ NUMÉRIQUE GÉANT (flex-grow pour remplir l'espace) */}
+            {/* PAVÉ NUMÉRIQUE GÉANT */}
             <div className="grid grid-cols-3 gap-3 mb-4 flex-grow">
               {keys.map((key, index) => {
-                if (key === '') return <div key={index}></div>; // Espace vide
+                if (key === '') return <div key={index}></div>;
                 
                 const isDelete = key === 'del';
                 return (
@@ -242,9 +246,8 @@ function App() {
           </div>
         )}
 
-        {/* PAGE: STATS (Inchangée) */}
+        {/* PAGE: STATS */}
         {activeTab === 'stats' && (
-          // ... (Code des stats identique à avant)
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
