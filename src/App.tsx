@@ -1,137 +1,106 @@
 import React, { useState, useEffect } from 'react';
 import { Smartphone, BarChart3, Lock, CheckCircle, WifiOff, Loader2, Send, History } from 'lucide-react';
 
-// 🔗 METS TON LIEN N8N ICI
-const WEBHOOK_SEND = "https://automation.primavis.fr/webhook/sms-send"; 
+// 🔗 TON LIEN N8N POUR ENVOYER LE SMS
+const WEBHOOK_SEND = "https://automation.primavis.fr/webhook/sms-send";
 
 function App() {
-  // 1. On récupère l'ID dans l'URL tout de suite
-  const searchParams = new URLSearchParams(window.location.search);
-  const urlClientId = searchParams.get('client_id');
-
-  // 2. États de sécurité
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Par défaut : Accès refusé
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);    // Par défaut : Chargement...
-
-  // Tes autres états
+  // --- ÉTATS (DATA) ---
   const [activeTab, setActiveTab] = useState<'home' | 'stats'>('home');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'cooldown'>('idle');
+  
+  // Sécurité et Chargement
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  
+  // Stats
   const [stats, setStats] = useState({ sent: 0, clicks: 0 });
 
-  // 3. LA SÉCURITÉ : On vérifie l'ID auprès de n8n au chargement
+  // --- 1. LE CERVEAU (SÉCURITÉ + MÉMOIRE) ---
   useEffect(() => {
-    // Si pas d'ID dans l'URL, on cherche même pas : c'est NON direct.
-    if (!urlClientId) {
-      setIsLoadingAuth(false);
-      return; 
+    // A. On cherche l'ID partout (URL d'abord, Mémoire ensuite)
+    const searchParams = new URLSearchParams(window.location.search);
+    let urlId = searchParams.get('client_id');
+    const storedId = localStorage.getItem('primavis_client_id');
+
+    // Si on a un ID dans l'URL (première fois), on le sauvegarde pour toujours
+    if (urlId) {
+      localStorage.setItem('primavis_client_id', urlId);
+    } 
+    // Si pas d'ID dans l'URL mais qu'on en a un en mémoire, on l'utilise
+    else if (storedId) {
+      urlId = storedId;
     }
 
-    // Sinon, on demande à n8n si ce client existe
-    // Remplace bien par TON URL de webhook Dashboard
+    setClientId(urlId);
+
+    // B. Si on a trouvé aucun ID nul part -> Bloqué direct
+    if (!urlId) {
+      setIsLoadingAuth(false);
+      return;
+    }
+
+    // C. Si on a un ID, on vérifie chez n8n qu'il est valide
+    // ⚠️ REMPLACE BIEN PAR TON URL DASHBOARD ICI
     const API_URL = "https://automation.primavis.fr/webhook/dashboard"; 
 
-    fetch(`${API_URL}?client_id=${urlClientId}`)
+    fetch(`${API_URL}?client_id=${urlId}`)
       .then(res => res.json())
       .then(data => {
-        // N8N doit nous renvoyer une info qui prouve que le client existe
-        // Si data.found === false ou si on a une erreur, on bloque
         if (data.error || data.message === "Client inconnu") {
-           console.error("Client non reconnu par n8n");
+           console.error("Client rejeté par n8n");
            setIsAuthenticated(false);
+           // Si l'ID est faux, on le nettoie de la mémoire pour pas rester bloqué
+           localStorage.removeItem('primavis_client_id'); 
         } else {
-           // C'est bon, le client existe, on charge ses stats
+           // SUCCÈS !
            setIsAuthenticated(true);
            setStats({
-             sent: data.envoyes || 0,
+             sent: data.envoyes || 0, // Protection contre l'écran blanc (si undefined, met 0)
              clicks: data.clics || 0
            });
         }
       })
       .catch(err => {
-        console.error("Erreur connexion", err);
-        setIsAuthenticated(false); // En cas d'erreur réseau, on bloque par sécurité
+        console.error("Erreur réseau", err);
+        // En cas d'erreur réseau, on peut choisir de laisser entrer ou non. 
+        // Ici on bloque par sécurité, mais tu pourrais mettre setIsAuthenticated(true) pour le mode hors ligne.
+        setIsAuthenticated(false); 
       })
       .finally(() => {
-        setIsLoadingAuth(false); // Fin du chargement
+        setIsLoadingAuth(false);
       });
-  }, [urlClientId]);
-
-  // 4. LES ÉCRANS DE BLOCAGE
-  
-  // A. Écran de chargement (pendant que n8n vérifie)
-  if (isLoadingAuth) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-        <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
-        <p>Vérification de l'accès...</p>
-      </div>
-    );
-  }
-
-  // B. Écran de Verrouillage (Si pas d'ID ou ID faux)
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-6 text-center">
-        <Lock className="w-24 h-24 text-red-500 mb-6" />
-        <h1 className="text-3xl font-bold mb-2">Accès Refusé</h1>
-        <p className="text-gray-400 mb-8">
-          Ce lien est invalide ou votre identifiant client est incorrect.
-        </p>
-        <div className="text-sm text-gray-600 border border-gray-800 p-3 rounded">
-          ID Tenté : {urlClientId || "Aucun"}
-        </div>
-      </div>
-    );
-  }
-
-  // ... LA SUITE DE TON CODE (return <div className="min-h-screen...")
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const idFromUrl = params.get('client_id');
-
-    if (idFromUrl) {
-      setClientId(idFromUrl);
-      localStorage.setItem('primavis_client_id', idFromUrl);
-    } else {
-      const savedId = localStorage.getItem('primavis_client_id');
-      if (savedId) setClientId(savedId);
-    }
   }, []);
 
-  const handlePress = (num: string) => {
-    if (phoneNumber.length < 10) setPhoneNumber(prev => prev + num);
-  };
-  
-  const handleDelete = () => {
-    setPhoneNumber(prev => prev.slice(0, -1));
-  };
+  // --- 2. FONCTION D'ENVOI SMS ---
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (phoneNumber.length < 10) return;
 
-  const handleSend = async () => {
-    if (phoneNumber.length !== 10) return;
     setStatus('loading');
 
     try {
+      // On envoie à n8n avec l'ID du client sécurisé
       const response = await fetch(WEBHOOK_SEND, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           phone: phoneNumber,
-          client_id: clientId,
-          timestamp: new Date().toISOString()
-        }),
+          client_id: clientId // On utilise l'ID mémorisé
+        }), 
       });
 
       if (response.ok) {
         setStatus('success');
         setPhoneNumber('');
+        // On met à jour le compteur localement pour l'effet immédiat
         setStats(prev => ({ ...prev, sent: prev.sent + 1 }));
-        setTimeout(() => setStatus('cooldown'), 2000);
-        setTimeout(() => setStatus('idle'), 5000);
+        
+        setTimeout(() => setStatus('idle'), 3000);
       } else {
         setStatus('error');
-        setTimeout(() => setStatus('idle'), 3000);
       }
     } catch (error) {
       setStatus('error');
@@ -139,145 +108,143 @@ function App() {
     }
   };
 
-  // --- ECRAN DE BLOCAGE ---
-  if (!clientId) {
+  // --- 3. LES ÉCRANS DE BLOCAGE (Rendu conditionnel) ---
+
+  // Écran de chargement
+  if (isLoadingAuth) {
     return (
-      <div className="h-[100dvh] bg-slate-900 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="bg-slate-800 p-8 rounded-3xl shadow-2xl border border-slate-700 max-w-sm">
-          <Lock className="w-16 h-16 text-red-500 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-white mb-2">Accès Sécurisé</h1>
-          <p className="text-slate-400">Veuillez utiliser votre lien unique <strong>Primavis</strong>.</p>
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
+        <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
+        <p className="font-medium">Connexion sécurisée...</p>
+      </div>
+    );
+  }
+
+  // Écran Cadenas (Si refusé)
+  if (!isAuthenticated || !clientId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-6 text-center">
+        <div className="bg-red-500/10 p-4 rounded-full mb-6">
+          <Lock className="w-16 h-16 text-red-500" />
+        </div>
+        <h1 className="text-2xl font-bold mb-2">Accès Refusé</h1>
+        <p className="text-gray-400 mb-8 max-w-xs mx-auto">
+          Lien invalide ou abonnement expiré.
+        </p>
+        <div className="text-xs text-gray-600 font-mono bg-gray-900 px-3 py-1 rounded">
+          ID: {clientId || "Aucun"}
         </div>
       </div>
     );
   }
 
-  // --- APP ---
+  // --- 4. L'APPLICATION (Si tout est OK) ---
   return (
-    <div className="h-[100dvh] bg-[#F8FAFC] font-sans text-slate-900 overflow-hidden flex flex-col relative select-none">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
       {/* HEADER */}
-      <div className="pt-8 pb-3 px-6 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 flex justify-between items-center shrink-0 z-10">
-        <div>
-           <h1 className="text-xl font-black text-[#0F172A] tracking-tighter">Primavis<span className="text-blue-600">.</span></h1>
-           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Espace Pro • {clientId}</p>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-blue-900/20">
-           {clientId.charAt(0).toUpperCase()}
+      <div className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+          Primavis
+        </h1>
+        <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100">
+          {clientId} {/* Affiche l'ID du client connecté */}
         </div>
       </div>
 
-      {activeTab === 'home' && (
-        <div className="flex-1 flex flex-col px-6 overflow-hidden animate-in fade-in duration-500 font-sans">
-          
-          {/* ZONE ROUGE : AFFICHAGE NUMÉRO (Plus gros) */}
-          <div className="flex-1 flex flex-col items-center justify-center relative min-h-[120px]">
-             {/* Changement ici : text-5xl au lieu de text-4xl */}
-             <div className={`text-5xl font-bold tracking-widest transition-all duration-300 ${phoneNumber ? 'text-[#0F172A]' : 'text-slate-200'}`}>
-                {phoneNumber ? phoneNumber.replace(/(\d{2})(?=\d)/g, '$1 ') : '06 -- -- -- --'}
+      {/* CONTENU PRINCIPAL */}
+      <div className="p-6 max-w-md mx-auto">
+        
+        {/* ONGLETS */}
+        <div className="flex p-1 bg-gray-200 rounded-xl mb-8 relative">
+          <div 
+            className={`absolute left-1 top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-lg shadow-sm transition-all duration-300 ease-out ${activeTab === 'stats' ? 'translate-x-full' : ''}`}
+          />
+          <button 
+            onClick={() => setActiveTab('home')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium relative z-10 transition-colors ${activeTab === 'home' ? 'text-blue-600' : 'text-gray-500'}`}
+          >
+            <Smartphone size={18} />
+            Nouveau SMS
+          </button>
+          <button 
+            onClick={() => setActiveTab('stats')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium relative z-10 transition-colors ${activeTab === 'stats' ? 'text-blue-600' : 'text-gray-500'}`}
+          >
+            <BarChart3 size={18} />
+            Statistiques
+          </button>
+        </div>
+
+        {/* PAGE: ENVOI SMS */}
+        {activeTab === 'home' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Numéro du client
+              </label>
+              <form onSubmit={handleSend}>
+                <input
+                  type="tel"
+                  placeholder="06 12 34 56 78"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="w-full text-2xl font-bold text-center tracking-wider py-4 border-b-2 border-gray-200 focus:border-blue-500 outline-none transition-colors placeholder-gray-300 bg-transparent"
+                  autoFocus
+                />
+                
+                <button
+                  disabled={status === 'loading' || phoneNumber.length < 10}
+                  className={`w-full mt-8 py-4 rounded-xl font-bold text-white shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2
+                    ${status === 'success' ? 'bg-green-500 shadow-green-500/30' : 
+                      status === 'error' ? 'bg-red-500 shadow-red-500/30' : 
+                      'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-blue-500/40'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {status === 'loading' ? (
+                    <Loader2 className="animate-spin" />
+                  ) : status === 'success' ? (
+                    <> <CheckCircle /> Envoyé ! </>
+                  ) : status === 'error' ? (
+                    <> <WifiOff /> Erreur </>
+                  ) : (
+                    <> <Send size={20} /> Envoyer la demande </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* PAGE: STATS */}
+        {activeTab === 'stats' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+             <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
+                   <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3">
+                      <Send size={20} />
+                   </div>
+                   <div className="text-3xl font-bold text-gray-900">{stats.sent}</div>
+                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">SMS Envoyés</div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
+                   <div className="w-10 h-10 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-3">
+                      <History size={20} />
+                   </div>
+                   <div className="text-3xl font-bold text-gray-900">{stats.clicks}</div>
+                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">Clics Avis</div>
+                </div>
              </div>
              
-             {/* NOTIFICATIONS */}
-             <div className="absolute bottom-4 h-6 flex items-center justify-center w-full">
-               {status === 'loading' && <span className="text-blue-600 text-xs font-medium flex items-center gap-1 animate-pulse"><Loader2 className="animate-spin w-3 h-3"/> Sécurisation...</span>}
-               {status === 'success' && <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-bounce shadow-sm"><CheckCircle className="w-3 h-3"/> Programmé (1h)</span>}
-               {status === 'error' && <span className="text-red-500 text-xs font-bold flex items-center gap-1"><WifiOff className="w-3 h-3"/> Erreur Réseau</span>}
+             <div className="mt-6 bg-blue-50 rounded-xl p-4 border border-blue-100 text-center">
+                <p className="text-sm text-blue-800">
+                   Votre taux de conversion est de <strong>{stats.sent > 0 ? Math.round((stats.clicks / stats.sent) * 100) : 0}%</strong>
+                </p>
              </div>
           </div>
-
-          {/* ZONE BLEUE : CLAVIER (Touches plus grosses) */}
-          <div className="shrink-0 mb-6">
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => handlePress(num.toString())}
-                  // Changements ici : h-16 (plus haut) et text-3xl (texte plus gros)
-                  className="h-16 w-full rounded-[24px] bg-white text-[#0F172A] text-3xl font-medium shadow-[0_3px_0px_#E2E8F0] active:shadow-none active:translate-y-[3px] border border-slate-100 transition-all duration-100"
-                >
-                  {num}
-                </button>
-              ))}
-              <div className="flex items-center justify-center opacity-10"><Smartphone className="w-7 h-7"/></div>
-              <button
-                onClick={() => handlePress('0')}
-                 // Changements ici : h-16 et text-3xl
-                className="h-16 w-full rounded-[24px] bg-white text-[#0F172A] text-3xl font-medium shadow-[0_3px_0px_#E2E8F0] active:shadow-none active:translate-y-[3px] border border-slate-100 transition-all duration-100"
-              >
-                0
-              </button>
-              <button
-                onClick={handleDelete}
-                 // Changement ici : h-16
-                className="h-16 w-full rounded-[24px] bg-slate-100 text-slate-500 shadow-[0_3px_0px_#CBD5E1] active:shadow-none active:translate-y-[3px] flex items-center justify-center transition-all duration-100"
-              >
-                ⌫
-              </button>
-            </div>
-
-            {/* ZONE VERTE : BOUTON ENVOYER (Plus gros) */}
-            <button
-              onClick={handleSend}
-              disabled={status === 'loading' || status === 'cooldown' || phoneNumber.length !== 10}
-              // Changements ici : h-16 (plus haut) et text-lg (texte plus gros)
-              className={`w-full h-16 rounded-2xl flex items-center justify-center text-lg font-bold shadow-xl transition-all duration-300 ${
-                phoneNumber.length === 10 && status !== 'loading' && status !== 'cooldown'
-                  ? 'bg-[#0F172A] text-white shadow-blue-900/20 active:scale-95 hover:bg-[#1E293B]' 
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-              }`}
-            >
-              {status === 'loading' ? <Loader2 className="animate-spin" /> : 
-               status === 'cooldown' ? <span className="text-sm">Veuillez patienter...</span> :
-               <span className="flex items-center gap-2 uppercase tracking-wider text-sm font-bold">Envoyer la demande <Send className="w-5 h-5"/></span>}
-            </button>
-            
-            <p className="text-center text-[10px] text-slate-400 mt-3 px-8 leading-tight">
-              En cliquant, je confirme l'accord du client.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'stats' && (
-        <div className="flex-1 px-6 mt-6 animate-in fade-in duration-500 overflow-y-auto font-sans">
-           <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
-                <div className="absolute -right-4 -top-4 w-20 h-20 bg-blue-50 rounded-full opacity-50"></div>
-                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Envoyés</p>
-                <p className="text-4xl font-black text-[#0F172A]">{stats.sent}</p>
-              </div>
-              <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
-                <div className="absolute -right-4 -top-4 w-20 h-20 bg-green-50 rounded-full opacity-50"></div>
-                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Clics (Est.)</p>
-                <p className="text-4xl font-black text-green-600">{stats.clicks}</p>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* ZONE JAUNE : BOTTOM BAR (Icônes et texte plus gros) */}
-      <div className="shrink-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 pb-8 pt-3 px-8 flex justify-between items-center rounded-t-[24px] z-20">
-        <button 
-          onClick={() => setActiveTab('home')}
-          // Changement ici : w-6 h-6 pour l'icône, text-[10px] pour le texte
-          className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'home' ? 'text-[#0F172A] -translate-y-1' : 'text-slate-300 hover:text-slate-400'}`}
-        >
-          <Smartphone strokeWidth={3} className="w-6 h-6" />
-          <span className="text-[10px] font-bold">Clavier</span>
-          {activeTab === 'home' && <div className="w-1 h-1 bg-[#0F172A] rounded-full mt-0.5"></div>}
-        </button>
-
-        <button 
-          onClick={() => setActiveTab('stats')}
-          // Changement ici : w-6 h-6 pour l'icône, text-[10px] pour le texte
-          className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'stats' ? 'text-blue-600 -translate-y-1' : 'text-slate-300 hover:text-slate-400'}`}
-        >
-          <BarChart3 strokeWidth={3} className="w-6 h-6" />
-          <span className="text-[10px] font-bold">Stats</span>
-          {activeTab === 'stats' && <div className="w-1 h-1 bg-blue-600 rounded-full mt-0.5"></div>}
-        </button>
+        )}
       </div>
-
     </div>
   );
 }
